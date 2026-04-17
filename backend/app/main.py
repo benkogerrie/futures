@@ -1,5 +1,17 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+
+def get_allowed_origins() -> list[str]:
+    """
+    FRONTEND_ORIGIN supports comma-separated values, for example:
+    https://your-app.vercel.app,https://your-custom-domain.com,http://localhost:3000
+    """
+    raw = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 
 app = FastAPI(
     title="Quant Trading Dashboard API",
@@ -9,7 +21,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

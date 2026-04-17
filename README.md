@@ -56,6 +56,55 @@ uvicorn app.main:app --reload --port 8000
 
 Backend runs on `http://localhost:8000`.
 
+## Deploy naar Railway (backend)
+
+Voor deze repo is Railway ingesteld om de backend vanuit `backend/` te draaien.
+
+### Stap 1: Nieuw Railway project
+
+1. Ga naar [railway.app](https://railway.app) en log in met GitHub.
+2. Klik **New Project** → **Deploy from GitHub repo**.
+3. Kies repo `benkogerrie/futures`.
+4. Open de service-instellingen en zet de **Root Directory** op `backend`.
+
+### Stap 2: Runtime en start
+
+- Railway gebruikt `requirements.txt` voor dependencies.
+- `Procfile` start de API met:
+  - `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`
+- `runtime.txt` pinnt Python op `3.13.5`.
+
+### Stap 3: Environment variables
+
+Zet in Railway bij **Variables** minimaal:
+
+- `FRONTEND_ORIGIN` = je Vercel URL(s), komma-gescheiden, bijvoorbeeld:
+  - `https://your-app.vercel.app,https://your-domain.com,http://localhost:3000`
+
+Later (wanneer nodig) vul je ook:
+- `SAXO_OPENAPI_BASE_URL`
+- `SAXO_APP_KEY`
+- `SAXO_APP_SECRET`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+### Stap 4: Verifiëren
+
+1. Wacht tot deployment groen is.
+2. Open de gegenereerde Railway URL.
+3. Controleer health endpoint:
+   - `https://<jouw-railway-domein>/health`
+4. Verwachte response:
+   - `{"status":"ok"}`
+
+### Stap 5: Koppelen met Vercel frontend
+
+1. Ga in Vercel naar **Project Settings** → **Environment Variables**.
+2. Zet:
+   - `NEXT_PUBLIC_API_URL=https://<jouw-railway-domein>`
+3. Redeploy de frontend op Vercel.
+
 ## Deploy naar Vercel (frontend)
 
 De repository is een monorepo: de Next.js-app staat in `frontend/`. Vercel moet daarom die map als root gebruiken.
