@@ -1,6 +1,6 @@
 # Quant Trading Dashboard
 
-NDQ trading dashboard met Next.js frontend en FastAPI backend. Sprint 2 bevat live account-koppeling met Saxo OpenAPI, backend-enforced trading rules en tradingagents-integratie.
+NDQ trading dashboard met Next.js frontend en FastAPI backend. Sprint 2 bevat live account-koppeling met Saxo OpenAPI en backend-enforced trading rules.
 
 ## Handoff / Nieuwe PC
 
@@ -87,7 +87,11 @@ Zet in Railway bij **Variables** minimaal:
 
 Voor Sprint 2 vul je ook:
 - `SAXO_OPENAPI_BASE_URL`
-- `SAXO_ACCESS_TOKEN`
+- `SAXO_ACCESS_TOKEN` *(optioneel: handmatig token)*
+- `SAXO_APP_KEY` + `SAXO_APP_SECRET` *(aanrader: OAuth token ophalen in backend)*
+- `SAXO_TOKEN_URL` *(default sim: `https://sim.logonvalidation.net/token`)*
+- `SAXO_OAUTH_GRANT_TYPE` *(default: `client_credentials`)*
+- `SAXO_OAUTH_SCOPE` *(optioneel)*
 - `SAXO_BALANCES_PATH` (default: `/port/v1/balances`)
 - `SAXO_POSITIONS_PATH` (default: `/port/v1/positions`)
 - `SAXO_TIMEOUT_SECONDS`
@@ -104,6 +108,7 @@ Voor Sprint 2 vul je ook:
   - open options value
   - total margin available
   - total account value
+  - tokenbron: `SAXO_ACCESS_TOKEN` of automatische OAuth via `SAXO_APP_KEY/SAXO_APP_SECRET`
 - `POST /api/rules/check-trade`  
   Dwingt backend-risicoregels af:
   - obligaties zijn niet tradebaar (collateral-only)

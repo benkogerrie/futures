@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 import httpx
@@ -88,12 +89,7 @@ def _sum_option_market_value(payload: Any) -> float:
 
 
 def _get_saxo_headers() -> dict[str, str]:
-    token = os.getenv("SAXO_ACCESS_TOKEN", "").strip()
-    if not token:
-        raise HTTPException(
-            status_code=500,
-            detail="SAXO_ACCESS_TOKEN ontbreekt. Stel deze in om live accountdata op te halen.",
-        )
+    token = get_saxo_access_token()
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -103,6 +99,80 @@ def _build_saxo_url(path_env: str, fallback: str) -> str:
     if not endpoint_path.startswith("/"):
         endpoint_path = f"/{endpoint_path}"
     return f"{base_url}{endpoint_path}"
+
+
+_SAXO_TOKEN_CACHE: dict[str, float | str] = {
+    "token": "",
+    "expires_at": 0.0,
+}
+
+
+def get_saxo_access_token() -> str:
+    """
+    Resolve access token in this order:
+    1) Static SAXO_ACCESS_TOKEN (manual token)
+    2) OAuth token endpoint using SAXO_APP_KEY/SAXO_APP_SECRET
+    """
+    static_token = os.getenv("SAXO_ACCESS_TOKEN", "").strip()
+    if static_token:
+        return static_token
+
+    cached_token = str(_SAXO_TOKEN_CACHE.get("token", ""))
+    expires_at = float(_SAXO_TOKEN_CACHE.get("expires_at", 0.0))
+    now = time.time()
+
+    # Small safety buffer before real expiry.
+    if cached_token and now < (expires_at - 30):
+        return cached_token
+
+    client_id = os.getenv("SAXO_APP_KEY", "").strip()
+    client_secret = os.getenv("SAXO_APP_SECRET", "").strip()
+    token_url = os.getenv("SAXO_TOKEN_URL", "https://sim.logonvalidation.net/token").strip()
+    grant_type = os.getenv("SAXO_OAUTH_GRANT_TYPE", "client_credentials").strip()
+    timeout = float(os.getenv("SAXO_TIMEOUT_SECONDS", "12"))
+
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Geen Saxo credentials gevonden. Zet SAXO_ACCESS_TOKEN "
+                "of gebruik SAXO_APP_KEY + SAXO_APP_SECRET (+ SAXO_TOKEN_URL)."
+            ),
+        )
+
+    body: dict[str, str] = {"grant_type": grant_type}
+    scope = os.getenv("SAXO_OAUTH_SCOPE", "").strip()
+    if scope:
+        body["scope"] = scope
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(token_url, data=body, auth=(client_id, client_secret))
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Saxo token request mislukt: {exc}",
+        ) from exc
+
+    access_token = str(payload.get("access_token", "")).strip()
+    expires_in_raw = payload.get("expires_in", 0)
+    try:
+        expires_in = int(expires_in_raw)
+    except (ValueError, TypeError):
+        expires_in = 0
+
+    if not access_token:
+        raise HTTPException(
+            status_code=502,
+            detail="Saxo token endpoint gaf geen access_token terug.",
+        )
+
+    _SAXO_TOKEN_CACHE["token"] = access_token
+    _SAXO_TOKEN_CACHE["expires_at"] = now + max(expires_in, 60)
+
+    return access_token
 
 
 def fetch_saxo_account_overview() -> dict[str, float]:
