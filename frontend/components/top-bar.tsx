@@ -14,7 +14,7 @@ const formatCurrency = (value: number) =>
 
 export function TopBar({ snapshot }: TopBarProps) {
   return (
-    <section className="grid gap-4 xl:grid-cols-4">
+    <section className="grid gap-4 xl:grid-cols-5">
       {snapshot.overviewMetrics.map((metric) => (
         <MetricCard
           key={metric.label}

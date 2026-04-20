@@ -3,6 +3,7 @@ import { portfolioSnapshot, PortfolioSnapshot } from "@/lib/mock-data";
 type DashboardApiResponse = {
   accountOverview: {
     cashBalance: number;
+    openOptionsValue: number;
     bondCollateralLtv90: number;
     totalMarginAvailable: number;
     totalAccountValue: number;
@@ -44,6 +45,7 @@ function mapToPortfolioSnapshot(payload: DashboardApiResponse): PortfolioSnapsho
     riskTone,
     overviewMetrics: [
       { label: "Cash Balance", value: payload.accountOverview.cashBalance },
+      { label: "Open Options Value", value: payload.accountOverview.openOptionsValue },
       { label: "Bond Collateral @ 90% LTV", value: payload.accountOverview.bondCollateralLtv90, tone: "success" },
       { label: "Total Margin Available", value: payload.accountOverview.totalMarginAvailable, tone: "success" },
       { label: "Total Account Value", value: payload.accountOverview.totalAccountValue },

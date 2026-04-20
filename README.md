@@ -1,6 +1,6 @@
 # Quant Trading Dashboard
 
-Sprint 1 skeleton for a dark-mode NDQ trading dashboard with a Next.js frontend and FastAPI backend.
+NDQ trading dashboard met Next.js frontend en FastAPI backend. Sprint 2 bevat live account-koppeling met Saxo OpenAPI, backend-enforced trading rules en tradingagents-integratie.
 
 ## Handoff / Nieuwe PC
 
@@ -85,13 +85,29 @@ Zet in Railway bij **Variables** minimaal:
 - `FRONTEND_ORIGIN` = je Vercel URL(s), komma-gescheiden, bijvoorbeeld:
   - `https://your-app.vercel.app,https://your-domain.com,http://localhost:3000`
 
-Later (wanneer nodig) vul je ook:
+Voor Sprint 2 vul je ook:
 - `SAXO_OPENAPI_BASE_URL`
-- `SAXO_APP_KEY`
-- `SAXO_APP_SECRET`
+- `SAXO_ACCESS_TOKEN`
+- `SAXO_BALANCES_PATH` (default: `/port/v1/balances`)
+- `SAXO_POSITIONS_PATH` (default: `/port/v1/positions`)
+- `SAXO_TIMEOUT_SECONDS`
+- `BOND_COLLATERAL_LTV90`
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+
+### Nieuwe backend endpoints (Sprint 2)
+
+- `GET /api/dashboard`  
+  Haalt live account-overview op via Saxo OpenAPI:
+  - cash balance
+  - open options value
+  - total margin available
+  - total account value
+- `POST /api/rules/check-trade`  
+  Dwingt backend-risicoregels af:
+  - obligaties zijn niet tradebaar (collateral-only)
+  - hard limit: max 50 contracten
 
 ### Stap 4: Verifiëren
 

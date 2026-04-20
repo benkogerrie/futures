@@ -44,6 +44,7 @@ export const portfolioSnapshot: PortfolioSnapshot = {
   riskTone: "warning",
   overviewMetrics: [
     { label: "Cash Balance", value: 5_100_000 },
+    { label: "Open Options Value", value: 6_720_000 },
     { label: "Bond Collateral @ 90% LTV", value: 12_280_000, tone: "success" },
     { label: "Total Margin Available", value: 17_380_000, tone: "success" },
     { label: "Total Account Value", value: 24_100_000 },
