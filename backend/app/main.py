@@ -107,6 +107,24 @@ _SAXO_TOKEN_CACHE: dict[str, float | str] = {
 }
 
 
+def _get_float_env(name: str, default: float) -> float:
+    """
+    Parse float env var safely; empty/invalid values fall back to default.
+    """
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+
+    value = raw.strip()
+    if not value:
+        return default
+
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 def get_saxo_access_token() -> str:
     """
     Resolve access token in this order:
@@ -129,7 +147,7 @@ def get_saxo_access_token() -> str:
     client_secret = os.getenv("SAXO_APP_SECRET", "").strip()
     token_url = os.getenv("SAXO_TOKEN_URL", "https://sim.logonvalidation.net/token").strip()
     grant_type = os.getenv("SAXO_OAUTH_GRANT_TYPE", "client_credentials").strip()
-    timeout = float(os.getenv("SAXO_TIMEOUT_SECONDS", "12"))
+    timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
     if not client_id or not client_secret:
         raise HTTPException(
@@ -179,7 +197,7 @@ def fetch_saxo_account_overview() -> dict[str, float]:
     headers = _get_saxo_headers()
     balances_url = _build_saxo_url("SAXO_BALANCES_PATH", "/port/v1/balances")
     positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions")
-    timeout = float(os.getenv("SAXO_TIMEOUT_SECONDS", "12"))
+    timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
     try:
         with httpx.Client(timeout=timeout, headers=headers) as client:
@@ -209,7 +227,7 @@ def fetch_saxo_account_overview() -> dict[str, float]:
 
     options_market_value = _sum_option_market_value(positions_payload)
 
-    bond_collateral_ltv90 = float(os.getenv("BOND_COLLATERAL_LTV90", "12280000"))
+    bond_collateral_ltv90 = _get_float_env("BOND_COLLATERAL_LTV90", 12_280_000.0)
     total_margin_available = cash_balance + bond_collateral_ltv90
     total_account_value = cash_balance + options_market_value + bond_collateral_ltv90
 
