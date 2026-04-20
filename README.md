@@ -2,6 +2,10 @@
 
 Sprint 1 skeleton for a dark-mode NDQ trading dashboard with a Next.js frontend and FastAPI backend.
 
+## Handoff / Nieuwe PC
+
+Voor opstart op een andere machine, volg: `SETUP-AND-HANDOFF.md`.
+
 ## Folder Structure
 
 ```text
