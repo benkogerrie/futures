@@ -1,9 +1,12 @@
 import { PriceChart } from "@/components/price-chart";
 import { RiskMonitor } from "@/components/risk-monitor";
 import { TopBar } from "@/components/top-bar";
-import { portfolioSnapshot } from "@/lib/mock-data";
+import { getDashboardData } from "@/lib/dashboard-api";
 
-export default function Home() {
+export default async function Home() {
+  const dashboardData = await getDashboardData();
+  const isApiSource = dashboardData.source === "api";
+
   return (
     <main className="min-h-screen bg-background px-6 py-8 text-copy lg:px-8">
       <div className="mx-auto max-w-[1600px] space-y-6">
@@ -17,11 +20,19 @@ export default function Home() {
           </div>
         </header>
 
-        <TopBar snapshot={portfolioSnapshot} />
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm shadow-glow ${
+            isApiSource ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+          }`}
+        >
+          {dashboardData.statusMessage}
+        </div>
+
+        <TopBar snapshot={dashboardData.snapshot} />
 
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <PriceChart snapshot={portfolioSnapshot} />
-          <RiskMonitor snapshot={portfolioSnapshot} />
+          <PriceChart snapshot={dashboardData.snapshot} />
+          <RiskMonitor snapshot={dashboardData.snapshot} />
         </section>
       </div>
     </main>
