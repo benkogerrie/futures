@@ -101,6 +101,22 @@ def _build_saxo_url(path_env: str, fallback: str) -> str:
     return f"{base_url}{endpoint_path}"
 
 
+def _build_saxo_query_params() -> dict[str, str]:
+    """
+    Optional account context for Saxo endpoints that require explicit keys.
+    """
+    params: dict[str, str] = {}
+    client_key = os.getenv("SAXO_CLIENT_KEY", "").strip()
+    account_key = os.getenv("SAXO_ACCOUNT_KEY", "").strip()
+
+    if client_key:
+        params["ClientKey"] = client_key
+    if account_key:
+        params["AccountKey"] = account_key
+
+    return params
+
+
 _SAXO_TOKEN_CACHE: dict[str, float | str] = {
     "token": "",
     "expires_at": 0.0,
@@ -214,9 +230,11 @@ def fetch_saxo_account_overview() -> dict[str, float]:
     positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions")
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
+    query_params = _build_saxo_query_params()
+
     def _request_json(client: httpx.Client, url: str) -> Any:
         try:
-            response = client.get(url)
+            response = client.get(url, params=query_params or None)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:

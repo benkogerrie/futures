@@ -95,6 +95,8 @@ Voor Sprint 2 vul je ook:
 - `SAXO_OAUTH_SCOPE` *(optioneel)*
 - `SAXO_BALANCES_PATH` (default: `/port/v1/balances`)
 - `SAXO_POSITIONS_PATH` (default: `/port/v1/positions`)
+- `SAXO_CLIENT_KEY` *(optioneel; nodig voor sommige Saxo `port` endpoints)*
+- `SAXO_ACCOUNT_KEY` *(optioneel; nodig voor sommige Saxo `port` endpoints)*
 - `SAXO_TIMEOUT_SECONDS`
 - `BOND_COLLATERAL_LTV90`
 - `SUPABASE_URL`
