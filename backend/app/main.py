@@ -129,7 +129,9 @@ def get_saxo_access_token() -> str:
     """
     Resolve access token in this order:
     1) Static SAXO_ACCESS_TOKEN (manual token)
-    2) OAuth token endpoint using SAXO_APP_KEY/SAXO_APP_SECRET
+    2) Cached token (from previous OAuth call)
+    3) Refresh token flow (SAXO_REFRESH_TOKEN)
+    4) Client credentials flow (SAXO_APP_KEY/SAXO_APP_SECRET)
     """
     static_token = os.getenv("SAXO_ACCESS_TOKEN", "").strip()
     if static_token:
@@ -147,6 +149,7 @@ def get_saxo_access_token() -> str:
     client_secret = os.getenv("SAXO_APP_SECRET", "").strip()
     token_url = os.getenv("SAXO_TOKEN_URL", "https://sim.logonvalidation.net/token").strip()
     grant_type = os.getenv("SAXO_OAUTH_GRANT_TYPE", "client_credentials").strip()
+    refresh_token = os.getenv("SAXO_REFRESH_TOKEN", "").strip()
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
     if not client_id or not client_secret:
@@ -158,9 +161,16 @@ def get_saxo_access_token() -> str:
             ),
         )
 
-    body: dict[str, str] = {"grant_type": grant_type}
+    resolved_grant_type = grant_type
+    body: dict[str, str] = {"grant_type": resolved_grant_type}
     scope = os.getenv("SAXO_OAUTH_SCOPE", "").strip()
-    if scope:
+    if refresh_token:
+        resolved_grant_type = "refresh_token"
+        body = {
+            "grant_type": resolved_grant_type,
+            "refresh_token": refresh_token,
+        }
+    elif scope:
         body["scope"] = scope
 
     try:
@@ -190,6 +200,11 @@ def get_saxo_access_token() -> str:
     _SAXO_TOKEN_CACHE["token"] = access_token
     _SAXO_TOKEN_CACHE["expires_at"] = now + max(expires_in, 60)
 
+    # Keep the newest refresh token if Saxo rotates it.
+    refreshed_refresh_token = str(payload.get("refresh_token", "")).strip()
+    if refreshed_refresh_token:
+        os.environ["SAXO_REFRESH_TOKEN"] = refreshed_refresh_token
+
     return access_token
 
 
@@ -199,20 +214,27 @@ def fetch_saxo_account_overview() -> dict[str, float]:
     positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions")
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
-    try:
-        with httpx.Client(timeout=timeout, headers=headers) as client:
-            balances_response = client.get(balances_url)
-            balances_response.raise_for_status()
-            balances_payload = balances_response.json()
+    def _request_json(client: httpx.Client, url: str) -> Any:
+        try:
+            response = client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text.strip()
+            body_suffix = f" | body: {body[:800]}" if body else ""
+            raise HTTPException(
+                status_code=502,
+                detail=f"Saxo OpenAPI request mislukt: {exc}{body_suffix}",
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Saxo OpenAPI request mislukt: {exc}",
+            ) from exc
 
-            positions_response = client.get(positions_url)
-            positions_response.raise_for_status()
-            positions_payload = positions_response.json()
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Saxo OpenAPI request mislukt: {exc}",
-        ) from exc
+    with httpx.Client(timeout=timeout, headers=headers) as client:
+        balances_payload = _request_json(client, balances_url)
+        positions_payload = _request_json(client, positions_url)
 
     cash_balance = _first_numeric_by_keys(
         balances_payload,

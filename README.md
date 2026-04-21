@@ -89,6 +89,7 @@ Voor Sprint 2 vul je ook:
 - `SAXO_OPENAPI_BASE_URL`
 - `SAXO_ACCESS_TOKEN` *(optioneel: handmatig token)*
 - `SAXO_APP_KEY` + `SAXO_APP_SECRET` *(aanrader: OAuth token ophalen in backend)*
+- `SAXO_REFRESH_TOKEN` *(aanrader voor langdurige sessies; backend ververst access tokens automatisch)*
 - `SAXO_TOKEN_URL` *(default sim: `https://sim.logonvalidation.net/token`)*
 - `SAXO_OAUTH_GRANT_TYPE` *(default: `client_credentials`)*
 - `SAXO_OAUTH_SCOPE` *(optioneel)*
@@ -109,6 +110,7 @@ Voor Sprint 2 vul je ook:
   - total margin available
   - total account value
   - tokenbron: `SAXO_ACCESS_TOKEN` of automatische OAuth via `SAXO_APP_KEY/SAXO_APP_SECRET`
+  - als `SAXO_REFRESH_TOKEN` is gezet gebruikt de backend refresh-token flow en cachet tokens
 - `POST /api/rules/check-trade`  
   Dwingt backend-risicoregels af:
   - obligaties zijn niet tradebaar (collateral-only)
