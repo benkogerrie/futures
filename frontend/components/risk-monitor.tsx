@@ -70,7 +70,47 @@ export function RiskMonitor({ snapshot }: RiskMonitorProps) {
             <span>Bond Inventory</span>
             <span className="font-medium text-copy">Collateral Only</span>
           </div>
+          {snapshot.riskDetailRows?.map((row) => (
+            <div key={row.label} className="flex items-center justify-between border-t border-border/60 pt-2">
+              <span>{row.label}</span>
+              <span className="font-medium text-copy">{row.value}</span>
+            </div>
+          ))}
         </div>
+
+        {snapshot.futuresBreakdown && snapshot.futuresBreakdown.length > 0 ? (
+          <div className="rounded-2xl border border-border bg-panel/50 p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Futures (SIM / Saxo)</p>
+            <div className="mt-3 max-h-48 space-y-2 overflow-y-auto text-sm">
+              {snapshot.futuresBreakdown.map((row) => (
+                <div key={`${row.symbol}-${row.direction}-${row.contracts}`} className="flex justify-between gap-2 text-muted">
+                  <span className="truncate text-copy">{row.symbol}</span>
+                  <span className="shrink-0 font-medium text-copy">
+                    {row.direction} {row.contracts !== 0 ? row.contracts.toLocaleString("nl-NL") : ""}
+                    {row.currentPrice != null ? ` @ ${row.currentPrice.toFixed(2)}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {snapshot.positionsSample && snapshot.positionsSample.length > 0 ? (
+          <div className="rounded-2xl border border-border bg-panel/50 p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Posities sample (SIM)</p>
+            <div className="mt-3 max-h-40 space-y-2 overflow-y-auto text-sm">
+              {snapshot.positionsSample.map((row, i) => (
+                <div key={`${row.symbol}-${i}`} className="flex justify-between gap-2 text-muted">
+                  <span className="truncate text-copy">{row.symbol}</span>
+                  <span className="shrink-0 text-xs text-copy">
+                    {row.assetType ?? "—"}
+                    {row.amountOpen != null ? ` · ${row.amountOpen.toLocaleString("nl-NL")}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

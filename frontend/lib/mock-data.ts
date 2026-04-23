@@ -1,7 +1,24 @@
 export type OverviewMetric = {
   label: string;
   value: number;
+  /** Als gezet, toont TopBar dit i.p.v. geformatteerde currency (bijv. aantallen). */
+  display?: string;
   tone?: "neutral" | "success" | "warning";
+};
+
+export type FuturesBreakdownRow = {
+  symbol: string;
+  contracts: number;
+  direction: string;
+  currentPrice?: number | null;
+  exposure?: number | null;
+  profitLossOnTrade?: number | null;
+};
+
+export type PositionSampleRow = {
+  symbol: string;
+  assetType?: string | null;
+  amountOpen?: number | null;
 };
 
 export type PricePoint = {
@@ -26,6 +43,17 @@ export type PortfolioSnapshot = {
   riskTone: "success" | "warning" | "danger";
   overviewMetrics: OverviewMetric[];
   priceSeries: PricePoint[];
+  displayCurrency: string;
+  currencyDecimals: number;
+  riskDetailRows?: { label: string; value: string }[];
+  futuresBreakdown?: FuturesBreakdownRow[];
+  positionsSample?: PositionSampleRow[];
+  chartMeta?: {
+    anchorPrice?: number | null;
+    environment?: string;
+    netPositionsReturned?: number;
+    calculationReliability?: string;
+  };
 };
 
 const basePrice = 21340;
@@ -42,6 +70,8 @@ export const portfolioSnapshot: PortfolioSnapshot = {
   marginAvailable: 17_380_000,
   riskLabel: "Controlled Risk",
   riskTone: "warning",
+  displayCurrency: "USD",
+  currencyDecimals: 0,
   overviewMetrics: [
     { label: "Cash Balance", value: 5_100_000 },
     { label: "Open Options Value", value: 6_720_000 },

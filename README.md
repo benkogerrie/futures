@@ -169,13 +169,13 @@ Later (wanneer nodig) vul je ook Supabase in:
 ### Nieuwe backend endpoints (Sprint 2)
 
 - `GET /api/dashboard`  
-  Haalt live account-overview op via Saxo OpenAPI:
-  - cash balance
-  - open options value
-  - total margin available
-  - total account value
-  - tokenbron: `SAXO_ACCESS_TOKEN` of automatische OAuth via `SAXO_APP_KEY/SAXO_APP_SECRET`
-  - als `SAXO_REFRESH_TOKEN` is gezet gebruikt de backend refresh-token flow en cachet tokens
+  Haalt zoveel mogelijk **SIM**-portfolio-data uit Saxo (`/balances/me`, `/positions/me`, `/netpositions/me`) en stuurt o.a.:
+  - `meta.environment` = `saxo-sim`
+  - `accountOverview`: kernvelden + veel numerieke balances-velden (marge, P/L, counts, …) en valuta
+  - `risk`: futures long uit nettoposities, limiet, utilisation-%, counts, `futuresBreakdown` (per futuressymbool)
+  - `chart`: overlays + SIM-`anchorPrice` (indien uit netpositions) + betrouwbaarheid
+  - `positionsSample`: eerste rijen uit positions-feed
+  - tokenbron: `SAXO_ACCESS_TOKEN` (optioneel) of OAuth via `SAXO_APP_KEY` / `SAXO_REFRESH_TOKEN` (+ `SAXO_REDIRECT_URI`)
 - `POST /api/rules/check-trade`  
   Dwingt backend-risicoregels af:
   - obligaties zijn niet tradebaar (collateral-only)

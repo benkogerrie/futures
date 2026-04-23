@@ -25,6 +25,15 @@ export function PriceChart({ snapshot }: PriceChartProps) {
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Main View</p>
           <h2 className="mt-2 text-xl font-semibold text-copy">{snapshot.symbol} Price Action</h2>
+          {snapshot.chartMeta?.anchorPrice != null && snapshot.chartMeta.anchorPrice > 0 ? (
+            <p className="mt-1 text-xs text-muted">
+              SIM: laatste futures-prijs-indicator ca. {snapshot.chartMeta.anchorPrice.toLocaleString("nl-NL", { maximumFractionDigits: 2 })} — chart nog
+              gesimuleerd.
+            </p>
+          ) : null}
+          {snapshot.chartMeta?.calculationReliability ? (
+            <p className="mt-0.5 text-xs text-muted">Saxo balances: {String(snapshot.chartMeta.calculationReliability)}</p>
+          ) : null}
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs text-muted md:grid-cols-4">
           <div className="rounded-xl border border-border bg-panel px-3 py-2">ALN Asia</div>

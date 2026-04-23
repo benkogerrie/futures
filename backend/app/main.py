@@ -75,6 +75,20 @@ def _hard_limit_contracts() -> int:
         return 50
 
 
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(round(value))
+    return None
+
+
 def _futures_long_from_netpositions(netpositions: Any) -> int:
     """Som van netto long futures-contracten uit /port/v1/netpositions/me (SIM)."""
     if not isinstance(netpositions, dict):
@@ -98,6 +112,126 @@ def _futures_long_from_netpositions(netpositions: Any) -> int:
         else:
             total += amount
     return max(0, int(round(total)))
+
+
+def _futures_breakdown_from_netpositions(netpositions: Any, *, limit: int = 12) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not isinstance(netpositions, dict):
+        return rows
+    for row in (netpositions.get("Data") or [])[:limit]:
+        if not isinstance(row, dict):
+            continue
+        base = row.get("NetPositionBase")
+        if not isinstance(base, dict) or base.get("AssetType") != "Futures":
+            continue
+        view = row.get("NetPositionView") if isinstance(row.get("NetPositionView"), dict) else {}
+        disp = row.get("DisplayAndFormat") if isinstance(row.get("DisplayAndFormat"), dict) else {}
+        symbol = (
+            disp.get("Symbol")
+            or disp.get("Description")
+            or row.get("NetPositionId")
+            or str(base.get("Uic") or "")
+        )
+        direction = base.get("OpeningDirection")
+        try:
+            amount = float(base.get("Amount") or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        current_price = _as_float(view.get("CurrentPrice"))
+        exposure = _as_float(view.get("Exposure"))
+        pnl = _as_float(view.get("ProfitLossOnTrade"))
+        rows.append(
+            {
+                "symbol": str(symbol)[:64],
+                "contracts": amount,
+                "direction": str(direction or ""),
+                "currentPrice": current_price,
+                "exposure": exposure,
+                "profitLossOnTrade": pnl,
+            }
+        )
+    return rows
+
+
+def _positions_summary(positions: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {"positionRowCount": 0, "totalMarketValueListed": None}
+    if not isinstance(positions, dict):
+        return out
+    count = positions.get("__count")
+    if isinstance(count, (int, float)):
+        out["positionRowCount"] = int(count)
+    else:
+        data = positions.get("Data")
+        if isinstance(data, list):
+            out["positionRowCount"] = len(data)
+    total_mv = 0.0
+    data = positions.get("Data") if isinstance(positions.get("Data"), list) else []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        mv = _first_numeric_by_keys(row, ["marketvalue", "netmarketvalue", "positionvalue", "value"])
+        if mv is not None:
+            total_mv += float(mv)
+    if total_mv != 0.0 or out["positionRowCount"]:
+        out["totalMarketValueListed"] = total_mv
+    return out
+
+
+def _flatten_initial_margin(balances: dict[str, Any]) -> dict[str, float]:
+    im = balances.get("InitialMargin")
+    if not isinstance(im, dict):
+        return {}
+    keys = (
+        ("MarginAvailable", "initialMarginAvailable"),
+        ("MarginUsedByCurrentPositions", "initialMarginUsedByPositions"),
+        ("MarginUtilizationPct", "initialMarginUtilizationPct"),
+        ("NetEquityForMargin", "initialMarginNetEquity"),
+    )
+    out: dict[str, float] = {}
+    for src, dst in keys:
+        v = _as_float(im.get(src))
+        if v is not None:
+            out[dst] = v
+    return out
+
+
+def _copy_balance_numerics(balances: dict[str, Any]) -> dict[str, float]:
+    """
+    Extra numerieke velden uit /balances/me (SIM) — camelCase voor JSON.
+    """
+    spec: list[tuple[str, str]] = [
+        ("CashAvailableForTrading", "cashAvailableForTrading"),
+        ("CashBlocked", "cashBlocked"),
+        ("CollateralAvailable", "collateralAvailable"),
+        ("MarginAvailableForTrading", "marginAvailableForTradingRaw"),
+        ("MarginCollateralNotAvailable", "marginCollateralNotAvailable"),
+        ("MarginNetExposure", "marginNetExposure"),
+        ("MarginUtilizationPct", "marginUtilizationPct"),
+        ("MarginAndCollateralUtilizationPct", "marginAndCollateralUtilizationPct"),
+        ("NetEquityForMargin", "netEquityForMargin"),
+        ("NonMarginPositionsValue", "nonMarginPositionsValue"),
+        ("OpenPositionsCount", "openPositionsCount"),
+        ("NetPositionsCount", "netPositionsCount"),
+        ("OrdersCount", "ordersCount"),
+        ("TriggerOrdersCount", "triggerOrdersCount"),
+        ("SettlementValue", "settlementValue"),
+        ("TotalValue", "totalValueRaw"),
+        ("TransactionsNotBooked", "transactionsNotBooked"),
+        ("UnrealizedMarginProfitLoss", "unrealizedMarginProfitLoss"),
+        ("UnrealizedPositionsValue", "unrealizedPositionsValue"),
+        ("CostToClosePositions", "costToClosePositions"),
+        ("FundsAvailableForSettlement", "fundsAvailableForSettlement"),
+        ("FundsReservedForSettlement", "fundsReservedForSettlement"),
+        ("CorporateActionUnrealizedAmounts", "corporateActionUnrealizedAmounts"),
+        ("OptionPremiumsMarketValue", "optionPremiumsMarketValue"),
+    ]
+    out: dict[str, float] = {}
+    for saxo_key, json_key in spec:
+        v = _as_float(balances.get(saxo_key))
+        if v is not None:
+            out[json_key] = v
+    out.update(_flatten_initial_margin(balances))
+    return out
 
 
 def _sum_option_market_value(payload: Any) -> float:
@@ -280,12 +414,12 @@ def get_saxo_access_token() -> str:
     return access_token
 
 
-def fetch_saxo_account_overview() -> tuple[dict[str, float], int]:
+def fetch_saxo_dashboard_sources() -> tuple[dict[str, Any], int, dict[str, Any], dict[str, Any], dict[str, Any]]:
     """
     Haalt balances, positions en netpositions in één Saxo-sessie op (SIM).
 
     Returns:
-        (account_overview, futures_long_contracts)
+        (account_overview, futures_long_contracts, balances_json, positions_json, netpositions_json)
     """
     headers = _get_saxo_headers()
     balances_url = _build_saxo_url("SAXO_BALANCES_PATH", "/port/v1/balances/me")
@@ -296,6 +430,7 @@ def fetch_saxo_account_overview() -> tuple[dict[str, float], int]:
     query_params = _build_saxo_query_params()
     net_q: dict[str, str] = dict(query_params) if query_params else {}
     net_q["$top"] = os.getenv("SAXO_NETPOSITIONS_TOP", "200").strip() or "200"
+    net_q["FieldGroups"] = "NetPositionBase,NetPositionView,DisplayAndFormat"
 
     def _request_json(
         client: httpx.Client,
@@ -351,18 +486,129 @@ def fetch_saxo_account_overview() -> tuple[dict[str, float], int]:
     else:
         bond_collateral_ltv90 = _get_float_env("BOND_COLLATERAL_LTV90", 12_280_000.0)
 
-    total_margin_available = cash_balance + bond_collateral_ltv90
-    total_account_value = cash_balance + options_market_value + bond_collateral_ltv90
+    if not isinstance(balances_payload, dict):
+        balances_payload = {}
 
-    overview: dict[str, float] = {
+    margin_saxo = _as_float(balances_payload.get("MarginAvailableForTrading"))
+    total_val_saxo = _as_float(balances_payload.get("TotalValue"))
+    total_margin_available = (
+        float(margin_saxo) if margin_saxo is not None else cash_balance + bond_collateral_ltv90
+    )
+    total_account_value = (
+        float(total_val_saxo)
+        if total_val_saxo is not None
+        else cash_balance + options_market_value + bond_collateral_ltv90
+    )
+
+    cd_raw = balances_payload.get("CurrencyDecimals")
+    try:
+        currency_decimals = int(cd_raw) if cd_raw is not None else 2
+    except (TypeError, ValueError):
+        currency_decimals = 2
+
+    overview: dict[str, Any] = {
+        "currency": str(balances_payload.get("Currency") or "USD"),
+        "currencyDecimals": currency_decimals,
         "cashBalance": cash_balance,
         "bondCollateralLtv90": bond_collateral_ltv90,
         "totalMarginAvailable": total_margin_available,
         "totalAccountValue": total_account_value,
         "openOptionsValue": options_market_value,
     }
+    overview.update(_copy_balance_numerics(balances_payload))
+    pos_summary = _positions_summary(positions_payload)
+    overview["positionsListedCount"] = float(pos_summary["positionRowCount"])
+    if pos_summary.get("totalMarketValueListed") is not None:
+        overview["positionsTotalMarketValue"] = float(pos_summary["totalMarketValueListed"])
+
     futures_long = _futures_long_from_netpositions(netpositions_payload)
-    return overview, futures_long
+    return overview, futures_long, balances_payload, positions_payload, netpositions_payload
+
+
+def _anchor_price_from_futures_netpositions(netpositions: Any) -> float | None:
+    if not isinstance(netpositions, dict):
+        return None
+    for row in netpositions.get("Data") or []:
+        if not isinstance(row, dict):
+            continue
+        base = row.get("NetPositionBase")
+        if not isinstance(base, dict) or base.get("AssetType") != "Futures":
+            continue
+        view = row.get("NetPositionView") if isinstance(row.get("NetPositionView"), dict) else {}
+        cp = _as_float(view.get("CurrentPrice"))
+        if cp is not None and cp > 0:
+            return cp
+    return None
+
+
+def _position_rows_sample(positions: Any, *, limit: int = 12) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    if not isinstance(positions, dict):
+        return out
+    for row in (positions.get("Data") or [])[:limit]:
+        if not isinstance(row, dict):
+            continue
+        pb = row.get("PositionBase") if isinstance(row.get("PositionBase"), dict) else {}
+        disp = row.get("DisplayAndFormat") if isinstance(row.get("DisplayAndFormat"), dict) else {}
+        sym = disp.get("Symbol") or disp.get("Description") or pb.get("NetPositionId") or ""
+        asset = pb.get("AssetType") or row.get("AssetType")
+        amt = _as_float(pb.get("AmountOpen") or pb.get("Size") or row.get("AmountOpen"))
+        out.append(
+            {
+                "symbol": str(sym)[:80],
+                "assetType": str(asset) if asset is not None else None,
+                "amountOpen": amt,
+            }
+        )
+    return out
+
+
+def _build_risk_payload(
+    balances: dict[str, Any],
+    netpositions: dict[str, Any],
+    futures_long: int,
+    hard_limit: int,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "instrument": "NDQ",
+        "allowedProducts": ["E-mini NASDAQ-100 Futures", "NDQ Listed Options"],
+        "currentLongFutures": futures_long,
+        "hardLimit": hard_limit,
+        "bondInventoryMode": "collateral_only",
+        "marginUtilizationPct": _as_float(balances.get("MarginUtilizationPct")),
+        "marginAndCollateralUtilizationPct": _as_float(balances.get("MarginAndCollateralUtilizationPct")),
+        "openPositionsCount": _as_int(balances.get("OpenPositionsCount")),
+        "netPositionsCount": _as_int(balances.get("NetPositionsCount")),
+        "ordersCount": _as_int(balances.get("OrdersCount")),
+        "triggerOrdersCount": _as_int(balances.get("TriggerOrdersCount")),
+        "unrealizedMarginProfitLoss": _as_float(balances.get("UnrealizedMarginProfitLoss")),
+        "unrealizedPositionsValue": _as_float(balances.get("UnrealizedPositionsValue")),
+        "marginNetExposure": _as_float(balances.get("MarginNetExposure")),
+        "futuresBreakdown": _futures_breakdown_from_netpositions(netpositions),
+    }
+    return {k: v for k, v in payload.items() if v is not None or k in ("futuresBreakdown", "allowedProducts")}
+
+
+def _build_chart_payload(balances: dict[str, Any], netpositions: dict[str, Any]) -> dict[str, Any]:
+    anchor = _anchor_price_from_futures_netpositions(netpositions)
+    data = netpositions.get("Data") if isinstance(netpositions.get("Data"), list) else []
+    return {
+        "symbol": "NDQ",
+        "overlays": [
+            "Asia High",
+            "Asia Low",
+            "London High",
+            "London Low",
+            "New York High",
+            "New York Low",
+            "VWAP",
+        ],
+        "currency": str(balances.get("Currency") or "USD"),
+        "environment": "saxo-sim",
+        "anchorPrice": anchor,
+        "calculationReliability": balances.get("CalculationReliability"),
+        "netPositionsReturned": len(data),
+    }
 
 
 class TradeCheckRequest(BaseModel):
@@ -434,22 +680,18 @@ def enforce_trading_rules(payload: TradeCheckRequest) -> TradeCheckResponse:
 
 @app.get("/api/dashboard")
 def get_dashboard_snapshot() -> dict:
-    account_overview, futures_long = fetch_saxo_account_overview()
+    account_overview, futures_long, balances, positions, netpositions = fetch_saxo_dashboard_sources()
     hard_limit = _hard_limit_contracts()
 
     return {
+        "meta": {
+            "environment": "saxo-sim",
+            "saxoOpenApi": True,
+        },
         "accountOverview": account_overview,
-        "risk": {
-            "instrument": "NDQ",
-            "allowedProducts": ["E-mini NASDAQ-100 Futures", "NDQ Listed Options"],
-            "currentLongFutures": futures_long,
-            "hardLimit": hard_limit,
-            "bondInventoryMode": "collateral_only",
-        },
-        "chart": {
-            "symbol": "NDQ",
-            "overlays": ["Asia High", "Asia Low", "London High", "London Low", "New York High", "New York Low", "VWAP"],
-        },
+        "risk": _build_risk_payload(balances, netpositions, futures_long, hard_limit),
+        "chart": _build_chart_payload(balances, netpositions),
+        "positionsSample": _position_rows_sample(positions),
     }
 
 
