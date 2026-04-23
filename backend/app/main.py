@@ -1,11 +1,16 @@
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Laadt backend/.env bij lokale uvicorn (Railway/Vercel gebruiken al echte env vars).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 
 def get_allowed_origins() -> list[str]:
@@ -166,6 +171,13 @@ def get_saxo_access_token() -> str:
     token_url = os.getenv("SAXO_TOKEN_URL", "https://sim.logonvalidation.net/token").strip()
     grant_type = os.getenv("SAXO_OAUTH_GRANT_TYPE", "client_credentials").strip()
     refresh_token = os.getenv("SAXO_REFRESH_TOKEN", "").strip()
+    refresh_file = os.getenv("SAXO_REFRESH_TOKEN_FILE", "").strip()
+    if not refresh_token and refresh_file:
+        try:
+            with open(refresh_file, encoding="utf-8") as handle:
+                refresh_token = handle.read().strip()
+        except OSError:
+            refresh_token = ""
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
     if not client_id or not client_secret:
@@ -186,6 +198,9 @@ def get_saxo_access_token() -> str:
             "grant_type": resolved_grant_type,
             "refresh_token": refresh_token,
         }
+        redirect_uri = os.getenv("SAXO_REDIRECT_URI", "").strip()
+        if redirect_uri:
+            body["redirect_uri"] = redirect_uri
     elif scope:
         body["scope"] = scope
 
@@ -220,13 +235,21 @@ def get_saxo_access_token() -> str:
     refreshed_refresh_token = str(payload.get("refresh_token", "")).strip()
     if refreshed_refresh_token:
         os.environ["SAXO_REFRESH_TOKEN"] = refreshed_refresh_token
+        if refresh_file:
+            try:
+                tmp = f"{refresh_file}.{os.getpid()}.tmp"
+                with open(tmp, "w", encoding="utf-8") as handle:
+                    handle.write(refreshed_refresh_token)
+                os.replace(tmp, refresh_file)
+            except OSError:
+                pass
 
     return access_token
 
 
 def fetch_saxo_account_overview() -> dict[str, float]:
     headers = _get_saxo_headers()
-    balances_url = _build_saxo_url("SAXO_BALANCES_PATH", "/port/v1/balances")
+    balances_url = _build_saxo_url("SAXO_BALANCES_PATH", "/port/v1/balances/me")
     positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions")
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 

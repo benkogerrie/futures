@@ -12,7 +12,10 @@ Voor opstart op een andere machine, volg: `SETUP-AND-HANDOFF.md`.
 .
 |-- backend
 |   |-- app
-|   |   `-- main.py
+|   |   |-- main.py
+|   |   `-- saxo.py
+|   |-- scripts
+|   |   `-- saxo_sim_oauth.py
 |   `-- requirements.txt
 |-- frontend
 |   |-- app
@@ -85,20 +88,77 @@ Zet in Railway bij **Variables** minimaal:
 - `FRONTEND_ORIGIN` = je Vercel URL(s), komma-gescheiden, bijvoorbeeld:
   - `https://your-app.vercel.app,https://your-domain.com,http://localhost:3000`
 
-Voor Sprint 2 vul je ook:
-- `SAXO_OPENAPI_BASE_URL`
-- `SAXO_ACCESS_TOKEN` *(optioneel: handmatig token)*
-- `SAXO_APP_KEY` + `SAXO_APP_SECRET` *(aanrader: OAuth token ophalen in backend)*
-- `SAXO_REFRESH_TOKEN` *(aanrader voor langdurige sessies; backend ververst access tokens automatisch)*
+Voor Sprint 2 (Saxo SIM) vul je ook in:
+
+- `SAXO_OPENAPI_BASE_URL` *(default: `https://gateway.saxobank.com/sim/openapi`)*
+- `SAXO_APP_KEY` + `SAXO_APP_SECRET`
+- `SAXO_REFRESH_TOKEN` *(aanrader; backend ververst access tokens automatisch)*  
+  **Belangrijk:** bij de refresh-token grant moet `SAXO_REDIRECT_URI` **exact** gelijk zijn aan de redirect URL van je OpenAPI-app (bijv. `https://futures-theta.vercel.app/auth/saxo/callback`).
+- `SAXO_REDIRECT_URI` *(verplicht zodra je `SAXO_REFRESH_TOKEN` gebruikt)*
+- `SAXO_REFRESH_TOKEN_FILE` *(optioneel; lokaal pad — op Railway meestal alleen `SAXO_REFRESH_TOKEN` als variable)*
+- `SAXO_ACCESS_TOKEN` *(optioneel; overschrijft andere flows — verwijder op productie als hij verlopen is)*
 - `SAXO_TOKEN_URL` *(default sim: `https://sim.logonvalidation.net/token`)*
-- `SAXO_OAUTH_GRANT_TYPE` *(default: `client_credentials`)*
+- `SAXO_OAUTH_GRANT_TYPE` *(default: `client_credentials`; wordt automatisch `refresh_token` als `SAXO_REFRESH_TOKEN` gezet is)*
 - `SAXO_OAUTH_SCOPE` *(optioneel)*
-- `SAXO_BALANCES_PATH` (default: `/port/v1/balances`)
+- `SAXO_BALANCES_PATH` *(default: `/port/v1/balances/me` — ingelogde SIM-gebruiker)*
 - `SAXO_POSITIONS_PATH` (default: `/port/v1/positions`)
-- `SAXO_CLIENT_KEY` *(optioneel; nodig voor sommige Saxo `port` endpoints)*
-- `SAXO_ACCOUNT_KEY` *(optioneel; nodig voor sommige Saxo `port` endpoints)*
+- `SAXO_CLIENT_KEY` / `SAXO_ACCOUNT_KEY` *(optioneel; alleen nodig als je expliciete endpoints zonder `/me` gebruikt)*
 - `SAXO_TIMEOUT_SECONDS`
 - `BOND_COLLATERAL_LTV90`
+
+#### Saxo SIM — stap voor stap (refresh token)
+
+1. **App op SIM**  
+   Op [Saxo OpenAPI / developer portal (SIM)](https://www.developer.saxo) een OpenAPI-applicatie aanmaken of openen. Noteer **App Key** en **App Secret**.
+
+2. **Redirect URI**  
+   Kies een vaste callback, bijvoorbeeld `http://localhost:8765/callback`. Zet **exact dezelfde string** in het developer portal **en** straks in `SAXO_REDIRECT_URI` (hoofdletters, slash, poort — alles moet kloppen).
+
+3. **`backend/.env` vullen** (kopieer `.env.example` naar `.env` als dat nog niet bestaat):
+
+   - `SAXO_APP_KEY=...`
+   - `SAXO_APP_SECRET=...`
+   - `SAXO_REDIRECT_URI=http://localhost:8765/callback` (of jouw gekozen URL)
+   - Optioneel: `SAXO_AUTH_BASE_URL=https://sim.logonvalidation.net` (default is al SIM)
+
+4. **OAuth-script draaien** (PowerShell):
+
+   ```powershell
+   cd backend
+   .\.venv\Scripts\Activate.ps1
+   python scripts/saxo_sim_oauth.py
+   ```
+
+   - Het script start een **kleine server op localhost** (poort en pad uit je `SAXO_REDIRECT_URI`) en opent de Saxo **authorize**-URL in je browser.
+   - Log in op **SIM**, keur de app goed; je wordt teruggestuurd naar `http://localhost:.../callback?code=...`.
+   - In de terminal verschijnt daarna **stap 4–7**; de refresh token wordt o.a. weggeschreven naar `backend/.saxo_refresh` (staat in `.gitignore`).
+
+   **Als de browser geen callback raakt** (firewall / verkeerde redirect):
+
+   ```powershell
+   python scripts/saxo_sim_oauth.py --manual
+   ```
+
+   Log in in de browser (plak de URL uit de terminal), en plak na redirect de **volledige adresbalk-URL** in de terminal.
+
+   **Als Saxo naar Vercel redirect** (bijv. `https://jouw-app.vercel.app/auth/saxo/callback?code=...`), wissel de code lokaal zonder localhost-server (alles na `#` in de URL mag je negeren — dat is alleen je frontend-router):
+
+   ```powershell
+   python scripts/saxo_sim_oauth.py --exchange-url 'https://jouw-app.vercel.app/auth/saxo/callback?code=...&state=...'
+   ```
+
+5. **API laten weten dat Saxo aan staat**  
+   Zet minstens één van deze twee opties in `.env` (en later hetzelfde op Railway):
+
+   - `SAXO_REFRESH_TOKEN=<plak de token uit .saxo_refresh>`, **of**
+   - `SAXO_REFRESH_TOKEN_FILE=E:\projecten\invest\backend\.saxo_refresh` (absoluut pad aanpassen)
+
+6. **Backend herstarten** en testen: `http://127.0.0.1:8000/api/dashboard` — je zou SIM-saldi moeten zien (geen mock meer zolang alle Saxo-variabelen gezet zijn).
+
+Zie ook Saxo: [Authorization Code Grant](https://developer.saxobank.com/openapi/learn/oauth-authorization-code-grant).
+
+Later (wanneer nodig) vul je ook Supabase in:
+
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
