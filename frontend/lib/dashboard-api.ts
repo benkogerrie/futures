@@ -219,11 +219,22 @@ export async function getDashboardData(): Promise<DashboardDataResult> {
       cache: "no-store",
     });
 
+    const rawBody = await response.text();
     if (!response.ok) {
-      throw new Error(`API status ${response.status}`);
+      let detail = "";
+      try {
+        const j = JSON.parse(rawBody) as { detail?: unknown };
+        if (typeof j.detail === "string") detail = j.detail;
+        else if (Array.isArray(j.detail))
+          detail = j.detail.map((x) => (typeof x === "object" && x && "msg" in x ? String((x as { msg: unknown }).msg) : String(x))).join("; ");
+      } catch {
+        if (rawBody) detail = rawBody;
+      }
+      const oneLine = detail.replace(/\s+/g, " ").trim().slice(0, 420);
+      throw new Error(`API status ${response.status}${oneLine ? ` — ${oneLine}` : ""}`);
     }
 
-    const payload = (await response.json()) as DashboardApiResponse;
+    const payload = JSON.parse(rawBody) as DashboardApiResponse;
 
     const sim = payload.meta?.environment === "saxo-sim";
     const statusMessage = sim
