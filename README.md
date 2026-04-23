@@ -102,6 +102,9 @@ Voor Sprint 2 (Saxo SIM) vul je ook in:
 - `SAXO_OAUTH_SCOPE` *(optioneel)*
 - `SAXO_BALANCES_PATH` *(default: `/port/v1/balances/me` — ingelogde SIM-gebruiker)*
 - `SAXO_POSITIONS_PATH` (default: `/port/v1/positions/me`)
+- `SAXO_NETPOSITIONS_PATH` (default: `/port/v1/netpositions/me`) — voor `currentLongFutures` in `/api/dashboard`
+- `SAXO_NETPOSITIONS_TOP` (default: `200`) — max rijen bij netpositions
+- `SAXO_NDQ_HARD_LIMIT` (default: `50`) — zelfde limiet als in `POST /api/rules/check-trade`
 - `SAXO_CLIENT_KEY` / `SAXO_ACCOUNT_KEY` *(optioneel; alleen nodig als je expliciete endpoints zonder `/me` gebruikt)*
 - `SAXO_TIMEOUT_SECONDS`
 - `BOND_COLLATERAL_LTV90`
@@ -176,7 +179,7 @@ Later (wanneer nodig) vul je ook Supabase in:
 - `POST /api/rules/check-trade`  
   Dwingt backend-risicoregels af:
   - obligaties zijn niet tradebaar (collateral-only)
-  - hard limit: max 50 contracten
+  - hard limit: configureerbaar via `SAXO_NDQ_HARD_LIMIT` (default 50 contracten)
 
 ### Stap 4: Verifiëren
 

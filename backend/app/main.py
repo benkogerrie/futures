@@ -67,6 +67,39 @@ def _first_numeric_by_keys(payload: Any, keys: list[str]) -> float | None:
     return None
 
 
+def _hard_limit_contracts() -> int:
+    raw = os.getenv("SAXO_NDQ_HARD_LIMIT", "50").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 50
+
+
+def _futures_long_from_netpositions(netpositions: Any) -> int:
+    """Som van netto long futures-contracten uit /port/v1/netpositions/me (SIM)."""
+    if not isinstance(netpositions, dict):
+        return 0
+    total = 0.0
+    for row in netpositions.get("Data") or []:
+        if not isinstance(row, dict):
+            continue
+        base = row.get("NetPositionBase")
+        if not isinstance(base, dict):
+            continue
+        if base.get("AssetType") != "Futures":
+            continue
+        try:
+            amount = float(base.get("Amount") or 0)
+        except (TypeError, ValueError):
+            continue
+        direction = base.get("OpeningDirection")
+        if direction == "Sell":
+            total -= amount
+        else:
+            total += amount
+    return max(0, int(round(total)))
+
+
 def _sum_option_market_value(payload: Any) -> float:
     """
     Recursively sum market values of option positions only.
@@ -247,17 +280,38 @@ def get_saxo_access_token() -> str:
     return access_token
 
 
-def fetch_saxo_account_overview() -> dict[str, float]:
+def fetch_saxo_account_overview() -> tuple[dict[str, float], int]:
+    """
+    Haalt balances, positions en netpositions in één Saxo-sessie op (SIM).
+
+    Returns:
+        (account_overview, futures_long_contracts)
+    """
     headers = _get_saxo_headers()
     balances_url = _build_saxo_url("SAXO_BALANCES_PATH", "/port/v1/balances/me")
     positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions/me")
+    netpositions_url = _build_saxo_url("SAXO_NETPOSITIONS_PATH", "/port/v1/netpositions/me")
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
     query_params = _build_saxo_query_params()
+    net_q: dict[str, str] = dict(query_params) if query_params else {}
+    net_q["$top"] = os.getenv("SAXO_NETPOSITIONS_TOP", "200").strip() or "200"
 
-    def _request_json(client: httpx.Client, url: str) -> Any:
+    def _request_json(
+        client: httpx.Client,
+        url: str,
+        *,
+        extra_params: dict[str, str] | None = None,
+    ) -> Any:
+        merged: dict[str, str] | None = None
+        if query_params or extra_params:
+            merged = {}
+            if query_params:
+                merged.update(query_params)
+            if extra_params:
+                merged.update(extra_params)
         try:
-            response = client.get(url, params=query_params or None)
+            response = client.get(url, params=merged)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
@@ -276,6 +330,7 @@ def fetch_saxo_account_overview() -> dict[str, float]:
     with httpx.Client(timeout=timeout, headers=headers) as client:
         balances_payload = _request_json(client, balances_url)
         positions_payload = _request_json(client, positions_url)
+        netpositions_payload = _request_json(client, netpositions_url, extra_params=net_q)
 
     cash_balance = _first_numeric_by_keys(
         balances_payload,
@@ -290,17 +345,24 @@ def fetch_saxo_account_overview() -> dict[str, float]:
 
     options_market_value = _sum_option_market_value(positions_payload)
 
-    bond_collateral_ltv90 = _get_float_env("BOND_COLLATERAL_LTV90", 12_280_000.0)
+    other_collateral = balances_payload.get("OtherCollateral") if isinstance(balances_payload, dict) else None
+    if isinstance(other_collateral, (int, float)) and float(other_collateral) >= 0:
+        bond_collateral_ltv90 = float(other_collateral)
+    else:
+        bond_collateral_ltv90 = _get_float_env("BOND_COLLATERAL_LTV90", 12_280_000.0)
+
     total_margin_available = cash_balance + bond_collateral_ltv90
     total_account_value = cash_balance + options_market_value + bond_collateral_ltv90
 
-    return {
+    overview: dict[str, float] = {
         "cashBalance": cash_balance,
         "bondCollateralLtv90": bond_collateral_ltv90,
         "totalMarginAvailable": total_margin_available,
         "totalAccountValue": total_account_value,
         "openOptionsValue": options_market_value,
     }
+    futures_long = _futures_long_from_netpositions(netpositions_payload)
+    return overview, futures_long
 
 
 class TradeCheckRequest(BaseModel):
@@ -317,20 +379,20 @@ class TradeCheckResponse(BaseModel):
     hard_limit: int
 
 
-HARD_LIMIT_CONTRACTS = 50
 BLOCKED_PRODUCT_TYPES = {"bond", "bonds", "obligatie", "obligaties"}
 
 
 def enforce_trading_rules(payload: TradeCheckRequest) -> TradeCheckResponse:
     product = payload.product_type.strip().lower()
     side = payload.side.strip().lower()
+    hard_limit = _hard_limit_contracts()
 
     if payload.quantity <= 0:
         return TradeCheckResponse(
             allowed=False,
             reason="Quantity moet groter zijn dan 0.",
             projected_long_futures=payload.current_long_futures,
-            hard_limit=HARD_LIMIT_CONTRACTS,
+            hard_limit=hard_limit,
         )
 
     if product in BLOCKED_PRODUCT_TYPES:
@@ -338,7 +400,7 @@ def enforce_trading_rules(payload: TradeCheckRequest) -> TradeCheckResponse:
             allowed=False,
             reason="Obligaties zijn collateral-only en niet tradebaar.",
             projected_long_futures=payload.current_long_futures,
-            hard_limit=HARD_LIMIT_CONTRACTS,
+            hard_limit=hard_limit,
         )
 
     projected = payload.current_long_futures
@@ -351,36 +413,37 @@ def enforce_trading_rules(payload: TradeCheckRequest) -> TradeCheckResponse:
             allowed=False,
             reason="Side moet buy of sell zijn.",
             projected_long_futures=payload.current_long_futures,
-            hard_limit=HARD_LIMIT_CONTRACTS,
+            hard_limit=hard_limit,
         )
 
-    if projected > HARD_LIMIT_CONTRACTS:
+    if projected > hard_limit:
         return TradeCheckResponse(
             allowed=False,
-            reason=f"Hard limit van {HARD_LIMIT_CONTRACTS} contracten overschreden.",
+            reason=f"Hard limit van {hard_limit} contracten overschreden.",
             projected_long_futures=projected,
-            hard_limit=HARD_LIMIT_CONTRACTS,
+            hard_limit=hard_limit,
         )
 
     return TradeCheckResponse(
         allowed=True,
         reason="Trade voldoet aan backend-risicoregels.",
         projected_long_futures=projected,
-        hard_limit=HARD_LIMIT_CONTRACTS,
+        hard_limit=hard_limit,
     )
 
 
 @app.get("/api/dashboard")
 def get_dashboard_snapshot() -> dict:
-    account_overview = fetch_saxo_account_overview()
+    account_overview, futures_long = fetch_saxo_account_overview()
+    hard_limit = _hard_limit_contracts()
 
     return {
         "accountOverview": account_overview,
         "risk": {
             "instrument": "NDQ",
             "allowedProducts": ["E-mini NASDAQ-100 Futures", "NDQ Listed Options"],
-            "currentLongFutures": 34,
-            "hardLimit": HARD_LIMIT_CONTRACTS,
+            "currentLongFutures": futures_long,
+            "hardLimit": hard_limit,
             "bondInventoryMode": "collateral_only",
         },
         "chart": {
