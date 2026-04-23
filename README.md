@@ -101,7 +101,7 @@ Voor Sprint 2 (Saxo SIM) vul je ook in:
 - `SAXO_OAUTH_GRANT_TYPE` *(default: `client_credentials`; wordt automatisch `refresh_token` als `SAXO_REFRESH_TOKEN` gezet is)*
 - `SAXO_OAUTH_SCOPE` *(optioneel)*
 - `SAXO_BALANCES_PATH` *(default: `/port/v1/balances/me` — ingelogde SIM-gebruiker)*
-- `SAXO_POSITIONS_PATH` (default: `/port/v1/positions`)
+- `SAXO_POSITIONS_PATH` (default: `/port/v1/positions/me`)
 - `SAXO_CLIENT_KEY` / `SAXO_ACCOUNT_KEY` *(optioneel; alleen nodig als je expliciete endpoints zonder `/me` gebruikt)*
 - `SAXO_TIMEOUT_SECONDS`
 - `BOND_COLLATERAL_LTV90`

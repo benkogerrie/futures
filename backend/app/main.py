@@ -250,7 +250,7 @@ def get_saxo_access_token() -> str:
 def fetch_saxo_account_overview() -> dict[str, float]:
     headers = _get_saxo_headers()
     balances_url = _build_saxo_url("SAXO_BALANCES_PATH", "/port/v1/balances/me")
-    positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions")
+    positions_url = _build_saxo_url("SAXO_POSITIONS_PATH", "/port/v1/positions/me")
     timeout = _get_float_env("SAXO_TIMEOUT_SECONDS", 12.0)
 
     query_params = _build_saxo_query_params()
