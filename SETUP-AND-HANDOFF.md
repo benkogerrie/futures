@@ -19,8 +19,11 @@ copy .env.example .env
 Zet in `frontend/.env`:
 
 ```env
+DASHBOARD_API_URL=https://futures-production-3c71.up.railway.app
 NEXT_PUBLIC_API_URL=https://futures-production-3c71.up.railway.app
 ```
+
+`DASHBOARD_API_URL` is **server-only** (geen rebuild op Vercel na wijziging). `NEXT_PUBLIC_*` blijft bruikbaar voor lokaal/compat.
 
 Installeer en start:
 
@@ -64,20 +67,26 @@ https://futures-theta.vercel.app,http://localhost:3000
 
 ### Vercel
 
-`NEXT_PUBLIC_API_URL`:
+1. **DASHBOARD_API_URL** (aanbevolen) — zelfde Railway-URL; dashboard haalt data per request server-side op.
 
 ```env
-https://futures-production-3c71.up.railway.app
+DASHBOARD_API_URL=https://futures-production-3c71.up.railway.app
+```
+
+2. **NEXT_PUBLIC_API_URL** (optioneel) — zelfde URL; alleen nodig als je de URL ook in de browserbundle wilt; na wijziging altijd **Redeploy**.
+
+```env
+NEXT_PUBLIC_API_URL=https://futures-production-3c71.up.railway.app
 ```
 
 ## 6) Snelle check na opstart
 
 1. Open lokaal dashboard op `http://localhost:3000`.
-2. Controleer dat de statusbalk groen is (live API).
+2. Controleer dat de statusbalk groen is (live API) en dat er een **tweede regel** met `Backend: … · … velden` staat (dan komt de data echt van Railway/Saxo).
 3. Als fallback/oranje zichtbaar is:
-   - controleer `frontend/.env`
-   - herstart dev server
-   - test `/health` URL in browser
+   - op **Vercel**: `DASHBOARD_API_URL` gezet? (Project → Settings → Environment Variables → Production)
+   - lokaal: `frontend/.env` en dev server herstart
+   - test `https://…railway…/health` in de browser
 
 ## 7) Verder werken in Cursor
 

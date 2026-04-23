@@ -3,6 +3,9 @@ import { RiskMonitor } from "@/components/risk-monitor";
 import { TopBar } from "@/components/top-bar";
 import { getDashboardData } from "@/lib/dashboard-api";
 
+/** Elke request opnieuw data ophalen (nodig voor Vercel + runtime DASHBOARD_API_URL). */
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const dashboardData = await getDashboardData();
   const isApiSource = dashboardData.source === "api";
@@ -25,7 +28,16 @@ export default async function Home() {
             isApiSource ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"
           }`}
         >
-          {dashboardData.statusMessage}
+          <p>{dashboardData.statusMessage}</p>
+          {isApiSource && dashboardData.diagnostics ? (
+            <p className="mt-2 border-t border-emerald-500/20 pt-2 font-mono text-xs text-emerald-100/90">
+              Backend: {dashboardData.diagnostics.backendHost} · {dashboardData.diagnostics.overviewMetricCount} velden
+              in de grid · valuta {dashboardData.diagnostics.currency} · voorbeeld cash saldo{" "}
+              {dashboardData.diagnostics.cashBalanceSample.toLocaleString("nl-NL", {
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          ) : null}
         </div>
 
         <TopBar snapshot={dashboardData.snapshot} />

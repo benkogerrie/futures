@@ -194,7 +194,8 @@ Later (wanneer nodig) vul je ook Supabase in:
 
 1. Ga in Vercel naar **Project Settings** → **Environment Variables**.
 2. Zet:
-   - `NEXT_PUBLIC_API_URL=https://<jouw-railway-domein>`
+   - **DASHBOARD_API_URL** = `https://<jouw-railway-domein>` (aanbevolen: server-side, geen rebuild na wijziging)
+   - optioneel: `NEXT_PUBLIC_API_URL` = dezelfde URL (build-time; na wijziging opnieuw deployen)
 3. Redeploy de frontend op Vercel.
 
 ## Deploy naar Vercel (frontend)
@@ -214,7 +215,7 @@ De repository is een monorepo: de Next.js-app staat in `frontend/`. Vercel moet 
 ### Stap 2: Omgevingsvariabelen
 
 1. In hetzelfde scherm, sectie **Environment Variables** (of later: **Project** → **Settings** → **Environment Variables**):
-   - Voeg toe: `NEXT_PUBLIC_API_URL` = de publieke URL van je FastAPI-backend zodra die online staat (bijv. `https://api.jouwdomein.nl`), voor **Production** (en eventueel **Preview**).
+   - Voeg toe: **`DASHBOARD_API_URL`** = de publieke URL van je FastAPI-backend (bijv. `https://…up.railway.app`), voor **Production**. Optioneel ook `NEXT_PUBLIC_API_URL` voor compatibiliteit.
    - Voor een eerste deploy zonder live API kun je tijdelijk `http://localhost:8000` zetten; dat werkt alleen in de browser vanaf je eigen machine, niet voor echte bezoekers. Zodra de API ergens host, vervang je deze waarde.
 
 2. **Deploy** start de eerste build.
@@ -239,4 +240,4 @@ Volg de prompts; kies hetzelfde team en link naar de bestaande GitHub-repo als d
 ### Bestanden in deze repo
 
 - `frontend/vercel.json` — expliciet Next.js, EU-regio `fra1`, vaste `install`/`build` voor voorspelbare builds.
-- `frontend/.env.example` — template voor `NEXT_PUBLIC_API_URL` (op Vercel zet je de echte waarden in het dashboard, niet in git).
+- `frontend/.env.example` — `DASHBOARD_API_URL` + `NEXT_PUBLIC_API_URL` (op Vercel zet je de echte waarden in het dashboard, niet in git).

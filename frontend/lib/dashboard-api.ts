@@ -41,7 +41,29 @@ export type DashboardDataResult = {
   snapshot: PortfolioSnapshot;
   source: "api" | "mock";
   statusMessage: string;
+  /** Alleen bij source=api: bewijs dat de server Railway heeft aangesproken. */
+  diagnostics?: {
+    backendHost: string;
+    overviewMetricCount: number;
+    currency: string;
+    cashBalanceSample: number;
+  };
 };
+
+/** Server-side (runtime op Vercel); niet in client-bundle. Fallback: NEXT_PUBLIC_* (build-time). */
+function getBackendBaseUrl(): string | undefined {
+  const a = process.env.DASHBOARD_API_URL?.trim();
+  const b = process.env.NEXT_PUBLIC_API_URL?.trim();
+  return a || b || undefined;
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "onbekend";
+  }
+}
 
 function pickNum(ao: Record<string, unknown>, key: string): number | undefined {
   const v = ao[key];
@@ -180,20 +202,21 @@ function mapToPortfolioSnapshot(payload: DashboardApiResponse): PortfolioSnapsho
 }
 
 export async function getDashboardData(): Promise<DashboardDataResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const baseUrl = getBackendBaseUrl();
 
   if (!baseUrl) {
     return {
       snapshot: portfolioSnapshot,
       source: "mock",
-      statusMessage: "NEXT_PUBLIC_API_URL ontbreekt, dashboard draait op mock-data.",
+      statusMessage:
+        "Geen backend-URL: zet op Vercel **DASHBOARD_API_URL** (aanrader, runtime) of **NEXT_PUBLIC_API_URL** (build-time) naar je Railway-API en deploy opnieuw.",
     };
   }
 
   try {
-    const response = await fetch(`${baseUrl}/api/dashboard`, {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/dashboard`, {
       method: "GET",
-      next: { revalidate: 15 },
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -204,19 +227,29 @@ export async function getDashboardData(): Promise<DashboardDataResult> {
 
     const sim = payload.meta?.environment === "saxo-sim";
     const statusMessage = sim
-      ? "SIM: accountdata via Saxo OpenAPI (Railway)."
+      ? "SIM: accountdata via Saxo OpenAPI (Railway) — onderstaande cijfers komen uit de API-response."
       : "Live accountgegevens geladen via Railway API.";
 
+    const snapshot = mapToPortfolioSnapshot(payload);
+    const ao = payload.accountOverview as Record<string, unknown>;
+    const cash = typeof ao.cashBalance === "number" ? ao.cashBalance : snapshot.overviewMetrics[0]?.value ?? 0;
+
     return {
-      snapshot: mapToPortfolioSnapshot(payload),
+      snapshot,
       source: "api",
       statusMessage,
+      diagnostics: {
+        backendHost: safeHost(baseUrl),
+        overviewMetricCount: snapshot.overviewMetrics.length,
+        currency: snapshot.displayCurrency,
+        cashBalanceSample: cash,
+      },
     };
   } catch (error) {
     return {
       snapshot: portfolioSnapshot,
       source: "mock",
-      statusMessage: `API fallback actief (${error instanceof Error ? error.message : "onbekende fout"}).`,
+      statusMessage: `API fallback actief (${error instanceof Error ? error.message : "onbekende fout"}) — host: ${safeHost(baseUrl)}.`,
     };
   }
 }
